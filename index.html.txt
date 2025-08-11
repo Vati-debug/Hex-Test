@@ -1,0 +1,691 @@
+﻿<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Waben 3-Sektor Puzzle — index</title>
+<style>
+  :root{
+    --bg1:#667eea; --bg2:#764ba2;
+    --panel-bg: rgba(255,255,255,0.06);
+    --accent:#ffeb3b;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;font-family:var(--font);-webkit-font-smoothing:antialiased}
+  body{
+    display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,var(--bg1),var(--bg2));
+    color:#fff;padding:16px;
+  }
+
+
+  .app { width:100%; max-width:1100px; display:grid; grid-template-columns: 340px 1fr; gap:16px; }
+  @media (max-width:900px){ .app { grid-template-columns:1fr; } }
+
+
+  .panel { background: var(--panel-bg); padding:14px; border-radius:12px; box-shadow: 0 12px 40px rgba(0,0,0,0.35); }
+  .header { text-align:center }
+  h1{margin:4px 0;font-size:1.25rem}
+  .sub{font-size:0.9rem;opacity:0.95}
+
+
+  .controls { display:flex; flex-direction:column; gap:10px; margin-top:8px }
+  .palette { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px }
+  .color-btn { width:44px; height:44px; border-radius:10px; border:3px solid rgba(255,255,255,0.15); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+  .color-btn.selected { border-color: var(--accent); transform:scale(1.06); box-shadow: 0 12px 30px rgba(0,0,0,0.35); }
+
+
+  .buttons { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+  button { border: none; padding:10px 14px; border-radius:10px; cursor:pointer; font-weight:700; color:white; box-shadow: 0 8px 22px rgba(0,0,0,0.35); }
+  button.primary { background: linear-gradient(45deg,#4CAF50,#2fa04a); }
+  button.ghost { background: linear-gradient(45deg,#556,#445); }
+
+
+  .timer {
+    margin-top:6px;
+    display:flex;justify-content:space-between;align-items:center;
+    background:rgba(0,0,0,0.08); padding:10px; border-radius:8px;
+    font-weight:700;
+  }
+
+
+  .board-wrap { position:relative; display:flex; align-items:center; justify-content:center; min-height:380px; border-radius:12px; overflow:hidden; }
+  @media (max-width:520px){ .board-wrap { min-height:300px } }
+
+
+  /* toast */
+  .toast { position:fixed; left:50%; top:10%; transform:translateX(-50%); background:linear-gradient(45deg,#4caf50,#2fa04a); padding:10px 16px; border-radius:12px; font-weight:800; box-shadow:0 12px 30px rgba(0,0,0,0.45); opacity:0; pointer-events:none; color:white; z-index:9999; }
+  .toast.show { opacity:1; pointer-events:auto; transition:opacity .2s ease }
+
+
+  .leaderboard { margin-top:10px; max-height:260px; overflow:auto; font-size:0.9rem; }
+  .lb-row { display:flex; justify-content:space-between; padding:6px 8px; border-radius:8px; background: rgba(0,0,0,0.08); margin-bottom:6px; }
+  .lb-small { opacity:0.85; font-size:0.82rem; }
+
+
+  /* confetti canvas overlay */
+  #confettiCanvas { position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; z-index:2000; }
+</style>
+</head>
+<body>
+  <div class="app">
+    <aside class="panel">
+      <div class="header">
+        <h1>🐝 Waben 3-Sektor Puzzle</h1>
+        <div class="sub">Jedes Drittel hat bestimmte Startfarben — ergänze symmetrisch.</div>
+      </div>
+
+
+      <div class="controls">
+        <div><strong>Level</strong><div id="levelInfo" style="margin-top:6px;font-weight:700">1 — 3-fach Symmetrie</div></div>
+
+
+        <div><strong>Farben</strong>
+          <div class="palette" id="colorPalette" aria-label="Farbpalette"></div>
+        </div>
+
+
+        <div class="buttons">
+          <button id="checkBtn" class="primary">Lösung prüfen</button>
+          <button id="resetBtn" class="ghost">Neustart</button>
+          <button id="hintBtn" class="ghost">Tipp</button>
+        </div>
+
+
+        <div class="timer" aria-live="polite">
+          <div>⏱ Zeit</div>
+          <div id="timerDisplay">0s</div>
+        </div>
+
+
+        <div style="margin-top:8px">
+          <div class="small-note">Spielsteuerung: Tippe Farbe → Wabe. Vorgaben sind unveränderlich. Auf Desktop: 1–6 wählt Farben.</div>
+        </div>
+
+
+        <div style="margin-top:10px"><strong>Highscore</strong>
+          <div style="margin-top:8px">
+            <input id="nameInput" placeholder="Dein Name" style="width:100%;padding:8px;border-radius:8px;border:none;outline:none;background:rgba(255,255,255,0.03);color:white" />
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button id="saveScoreBtn" class="ghost">Score speichern</button>
+              <button id="clearScoresBtn" class="ghost">Löschen</button>
+            </div>
+          </div>
+          <div class="leaderboard" id="leaderboard"></div>
+        </div>
+      </div>
+    </aside>
+
+
+    <section class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-weight:700">Spielbrett</div>
+        <div style="opacity:0.95">Radius: <span id="radiusLabel">3</span></div>
+      </div>
+
+
+      <div class="board-wrap" id="boardWrap">
+        <svg id="boardSvg" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" aria-label="Wabenspiel"></svg>
+        <canvas id="confettiCanvas"></canvas>
+      </div>
+    </section>
+  </div>
+
+
+  <div class="toast" id="toast">Richtig!</div>
+
+
+<script>
+/* --------- CONFIG --------- */
+const TRIPLETS = [
+  ['blue','red','green'],       // triplet 0
+  ['purple','yellow','orange']  // triplet 1
+];
+
+
+const COLOR_MAP = {
+  blue: ['#4A60E8','#2F48C9'],
+  red: ['#ff6b6b','#e55039'],
+  green: ['#12cbc4','#0fb1a8'],
+  purple: ['#a55eea','#8854d0'],
+  yellow: ['#fff176','#ffeb3b'],
+  orange: ['#fd9644','#fa8231']
+};
+
+
+const LEVELS = [
+  { radius: 3, triplets: 1, givenProb: 0.95 },
+  { radius: 3, triplets: 1, givenProb: 0.90 },
+  { radius: 4, triplets: 1, givenProb: 0.82 },
+  { radius: 4, triplets: 1, givenProb: 0.75 },
+  { radius: 4, triplets: 2, givenProb: 0.68 },
+  { radius: 5, triplets: 2, givenProb: 0.60 },
+  { radius: 5, triplets: 2, givenProb: 0.52 }
+];
+
+
+const MAX_ALLOWED_WRONG_CHECKS = 8;
+const BASE_TIME_LIMIT = 90;
+const HIGHSCORE_KEY = 'waben_highscores_v3';
+
+
+/* --------- DOM --------- */
+const boardSvg = document.getElementById('boardSvg');
+const boardWrap = document.getElementById('boardWrap');
+const confettiCanvas = document.getElementById('confettiCanvas');
+const colorPalette = document.getElementById('colorPalette');
+const checkBtn = document.getElementById('checkBtn');
+const resetBtn = document.getElementById('resetBtn');
+const hintBtn = document.getElementById('hintBtn');
+const toast = document.getElementById('toast');
+const levelInfoEl = document.getElementById('levelInfo');
+const radiusLabel = document.getElementById('radiusLabel');
+const timerDisplay = document.getElementById('timerDisplay');
+const nameInput = document.getElementById('nameInput');
+const saveScoreBtn = document.getElementById('saveScoreBtn');
+const clearScoresBtn = document.getElementById('clearScoresBtn');
+const leaderboardEl = document.getElementById('leaderboard');
+
+
+let currentLevel = 1;
+let selectedColor = 'blue';
+let hexGrid = []; // array of {q,r,index,playerColor,solutionColor,isGiven,orbitId,orbitPos,tripletId,sector}
+let hexElements = new Map(); // index -> polygon
+let orbits = [];
+let wrongChecks = 0;
+let levelStartTime = 0;
+let levelTimerId = null;
+let lastScore = null;
+let isChecking = false;
+
+
+/* --------- MATH (Flat-Top) --------- */
+function axialToPixel(q, r, size) {
+  const x = size * (1.5 * q);
+  const y = size * (Math.sqrt(3) * (r + q/2));
+  return { x, y };
+}
+function rotateAxialBy60(q,r,k){
+  k = ((k%6)+6)%6;
+  let x=q, z=r, y=-x-z;
+  for(let i=0;i<k;i++){
+    const nx=-z, ny=-x, nz=-y;
+    x=nx; y=ny; z=nz;
+  }
+  return { q:x, r:z };
+}
+
+
+/* --------- GRID & ORBITS --------- */
+function createHexGrid(radius){
+  hexGrid = [];
+  let idx=0;
+  for (let q=-radius; q<=radius; q++){
+    for (let r=Math.max(-radius, -q-radius); r<=Math.min(radius, -q+radius); r++){
+      hexGrid.push({ q, r, index: idx++, playerColor:'', solutionColor:'', isGiven:false, orbitId:-1, orbitPos:-1, tripletId:0, sector:-1 });
+    }
+  }
+}
+
+
+function findHex(q,r){ return hexGrid.find(h => h.q===q && h.r===r); }
+
+
+function buildOrbits(){
+  orbits = [];
+  const visited = new Set();
+  const step = 6 / 3; // rotate by 2 steps (120°)
+  for (const h of hexGrid){
+    const key = `${h.q},${h.r}`;
+    if (visited.has(key)) continue;
+    const members = [];
+    for (let k=0;k<3;k++){
+      const rot = rotateAxialBy60(h.q, h.r, k*step);
+      const hex = findHex(rot.q, rot.r);
+      if (hex) members.push({ q:rot.q, r:rot.r, index: hex.index, pos:k });
+    }
+    members.forEach(m => visited.add(`${m.q},${m.r}`));
+    const orbit = { members, tripletId:0 };
+    const orbitId = orbits.length;
+    orbits.push(orbit);
+    members.forEach(m => {
+      const hx = hexGrid[m.index];
+      hx.orbitId = orbitId;
+      hx.orbitPos = m.pos;
+    });
+  }
+}
+
+
+function computeSectors(){
+  hexGrid.forEach(h => {
+    const p = axialToPixel(h.q, h.r, 1);
+    const angle = (Math.atan2(p.y, p.x) * 180 / Math.PI + 360) % 360;
+    h.sector = Math.floor(angle / 120) % 3;
+  });
+}
+
+
+/* --------- PATTERN & GIVENS --------- */
+function generateSolutionAndGivens(cfg){
+  hexGrid.forEach(h => { h.solutionColor=''; h.playerColor=''; h.isGiven=false; });
+
+
+  orbits.forEach(o => {
+    o.tripletId = Math.floor(Math.random() * cfg.triplets);
+    o.members.forEach(mem => {
+      const hx = hexGrid[mem.index];
+      hx.tripletId = o.tripletId;
+      hx.solutionColor = TRIPLETS[o.tripletId][mem.pos % 3];
+    });
+  });
+
+
+  let allowedPerSector;
+  if (cfg.triplets === 1) {
+    allowedPerSector = [ ['blue'], ['red'], ['green'] ];
+  } else {
+    allowedPerSector = [ ['blue','purple'], ['red','yellow'], ['green','orange'] ];
+  }
+
+
+  hexGrid.forEach(h => {
+    const allowed = allowedPerSector[h.sector] || [];
+    if (allowed.includes(h.solutionColor) && Math.random() < cfg.givenProb) {
+      h.isGiven = true;
+      h.playerColor = h.solutionColor;
+    }
+  });
+
+
+  for (let s=0;s<3;s++){
+    const has = hexGrid.some(h => h.sector===s && h.isGiven);
+    if (!has) {
+      const cand = hexGrid.filter(h => h.sector===s && allowedPerSector[s].includes(h.solutionColor));
+      if (cand.length) {
+        const pick = cand[Math.floor(Math.random()*cand.length)];
+        pick.isGiven = true; pick.playerColor = pick.solutionColor;
+      }
+    }
+  }
+}
+
+
+/* --------- RENDER SVG --------- */
+function renderBoard(){
+  boardSvg.innerHTML = '';
+  hexElements.clear();
+  if (!hexGrid.length) return;
+
+
+  const unit = 1;
+  const pts = hexGrid.map(h => axialToPixel(h.q, h.r, unit));
+  const hexW = 2 * unit;
+  const hexH = Math.sqrt(3) * unit;
+  const minX = Math.min(...pts.map(p => p.x - unit));
+  const maxX = Math.max(...pts.map(p => p.x + unit));
+  const minY = Math.min(...pts.map(p => p.y - hexH/2));
+  const maxY = Math.max(...pts.map(p => p.y + hexH/2));
+  const totalW = maxX - minX;
+  const totalH = maxY - minY;
+
+
+  const rect = boardWrap.getBoundingClientRect();
+  const availW = Math.max(260, rect.width - 8);
+  const availH = Math.max(260, rect.height - 8);
+  // scale factor
+  const scale = Math.min(availW / totalW, availH / totalH) * 0.95;
+  const offsetX = (availW - totalW*scale)/2 - minX*scale + 4;
+  const offsetY = (availH - totalH*scale)/2 - minY*scale + 4;
+
+
+  boardSvg.setAttribute('viewBox', `0 0 ${Math.max(availW,300)} ${Math.max(availH,300)}`);
+  boardSvg.style.width = '100%'; boardSvg.style.height = '100%';
+
+
+  // defs gradient
+  const defs = document.createElementNS('http://www.w3.org/2000/svg','defs'); boardSvg.appendChild(defs);
+  Object.entries(COLOR_MAP).forEach(([k, arr])=>{
+    const id = `g-${k}`;
+    const lin = document.createElementNS('http://www.w3.org/2000/svg','linearGradient');
+    lin.setAttribute('id', id); lin.setAttribute('x1','0%'); lin.setAttribute('x2','100%');
+    arr.forEach((c,i)=>{
+      const stop = document.createElementNS('http://www.w3.org/2000/svg','stop');
+      stop.setAttribute('offset', `${i*100}%`);
+      stop.setAttribute('stop-color', c);
+      lin.appendChild(stop);
+    });
+    defs.appendChild(lin);
+  });
+
+
+  function hexPts(cx, cy, size) {
+    const pts = [];
+    for (let i=0;i<6;i++){
+      const ang = Math.PI/180 * (60*i);
+      pts.push(`${(cx + size*Math.cos(ang)).toFixed(2)},${(cy + size*Math.sin(ang)).toFixed(2)}`);
+    }
+    return pts.join(' ');
+  }
+
+
+  const gHexes = document.createElementNS('http://www.w3.org/2000/svg','g');
+  boardSvg.appendChild(gHexes);
+
+
+  hexGrid.forEach(h => {
+    const raw = axialToPixel(h.q, h.r, unit);
+    const cx = raw.x * scale + offsetX;
+    const cy = raw.y * scale + offsetY;
+    const pixelSize = unit * scale;
+
+
+    const poly = document.createElementNS('http://www.w3.org/2000/svg','polygon');
+    poly.setAttribute('points', hexPts(cx, cy, pixelSize));
+    poly.setAttribute('data-index', h.index);
+    poly.style.stroke = 'rgba(255,255,255,0.12)';
+    poly.style.strokeWidth = Math.max(1, Math.round(scale * 0.06));
+    poly.style.cursor = h.isGiven ? 'not-allowed' : 'pointer';
+    poly.style.transition = 'transform 140ms ease, opacity 140ms ease';
+
+
+    if (h.playerColor) poly.style.fill = `url(#g-${h.playerColor})`;
+    else poly.style.fill = 'rgba(255,255,255,0.04)';
+
+
+    if (h.isGiven) {
+      poly.style.stroke = 'rgba(255,255,255,0.45)';
+      poly.style.opacity = 1;
+    }
+
+
+    if (h.q===0 && h.r===0 && !h.playerColor) poly.style.fill = 'rgba(255,235,59,0.08)';
+
+
+    poly.addEventListener('click', (ev) => onCellClick(h.index, ev));
+    poly.addEventListener('touchend', (ev) => { ev.preventDefault(); onCellClick(h.index, ev); });
+
+
+    gHexes.appendChild(poly);
+    hexElements.set(h.index, poly);
+  });
+
+
+  drawSymmetryLines();
+}
+
+
+/* --------- SYMMETRY LINES --------- */
+function drawSymmetryLines(){
+  const olds = boardSvg.querySelectorAll('.sym-line'); olds.forEach(n=>n.remove());
+  const rect = boardWrap.getBoundingClientRect();
+  const cx = rect.width/2;
+  const cy = rect.height/2;
+  const maxLen = Math.max(rect.width, rect.height) * 0.6;
+  for (let i=0;i<3;i++){
+    const ang = (360/3) * i * Math.PI/180;
+    const x2 = cx + Math.cos(ang)*maxLen;
+    const y2 = cy + Math.sin(ang)*maxLen;
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1', cx); line.setAttribute('y1', cy);
+    line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+    line.classList.add('sym-line');
+    line.style.stroke = 'rgba(255,255,255,0.05)';
+    line.style.strokeWidth = 1; line.style.pointerEvents='none';
+    boardSvg.appendChild(line);
+  }
+}
+
+
+/* --------- INTERACTION --------- */
+function onCellClick(index){
+  if (isChecking) return;
+  const h = hexGrid[index];
+  if (!h || h.isGiven) return;
+  h.playerColor = (h.playerColor === selectedColor) ? '' : selectedColor;
+  updateHexVisual(h);
+}
+
+
+function updateHexVisual(h){
+  const poly = hexElements.get(h.index);
+  if (!poly) return;
+  if (h.playerColor) poly.style.fill = `url(#g-${h.playerColor})`;
+  else poly.style.fill = 'rgba(255,255,255,0.04)';
+}
+
+
+/* --------- CHECK & SCORE --------- */
+function checkSolution(){
+  if (isChecking) return;
+  isChecking = true;
+  let correct = true;
+  for (const h of hexGrid){
+    const sol = h.solutionColor || '';
+    const pl = h.playerColor || '';
+    if (sol !== pl) { correct = false; break; }
+  }
+  if (correct){
+    const timeTaken = (Date.now() - levelStartTime)/1000;
+    const cfg = LEVELS[currentLevel - 1];
+    const timeLimit = BASE_TIME_LIMIT + cfg.radius * 10;
+    const timeFactor = Math.max(0, Math.min(1, (timeLimit - timeTaken) / timeLimit));
+    const accuracyFactor = Math.max(0, Math.min(1, 1 - (wrongChecks / MAX_ALLOWED_WRONG_CHECKS)));
+    const score = Math.round(1000 * (0.75 * timeFactor + 0.25 * accuracyFactor));
+    lastScore = { score, timeTaken: Math.round(timeTaken), wrongChecks };
+    showToast(`✅ Richtig! Score: ${score}`);
+    startConfetti();
+    stopTimer();
+    setTimeout(()=> {
+      currentLevel++;
+      if (currentLevel > LEVELS.length) currentLevel = 1;
+      startLevel(currentLevel);
+      isChecking = false;
+    }, 1200);
+  } else {
+    wrongChecks++;
+    showToast('❌ Leider falsch — nochmal prüfen');
+    const wrongs = hexGrid.filter(h => !h.isGiven && (h.playerColor || '') !== (h.solutionColor || ''));
+    wrongs.forEach(h=>{
+      const poly = hexElements.get(h.index);
+      if (poly) {
+        poly.style.transform = 'scale(1.08)';
+        setTimeout(()=> poly.style.transform = 'scale(1)', 300);
+      }
+    });
+    setTimeout(()=> { isChecking = false; }, 700);
+  }
+}
+
+
+/* --------- HINT --------- */
+function giveHint(){
+  const candidates = hexGrid.filter(h => !h.isGiven && !h.playerColor && h.solutionColor);
+  if (!candidates.length) { showToast('Kein Tipp verfügbar'); return; }
+  const chosen = candidates[Math.floor(Math.random()*candidates.length)];
+  chosen.playerColor = chosen.solutionColor;
+  updateHexVisual(chosen);
+}
+
+
+/* --------- PALETTE UI --------- */
+function buildPalette(activeTriplets){
+  colorPalette.innerHTML = '';
+  const colors = [];
+  for (let t=0;t<activeTriplets;t++) TRIPLETS[t].forEach(c=>{ if (!colors.includes(c)) colors.push(c); });
+  colors.forEach((c,i)=>{
+    const div = document.createElement('div');
+    div.className = 'color-btn';
+    div.setAttribute('data-color', c);
+    div.title = c;
+    div.style.background = `linear-gradient(135deg, ${COLOR_MAP[c][0]}, ${COLOR_MAP[c][1]})`;
+    div.addEventListener('click', ()=> selectColor(c));
+    div.tabIndex = 0;
+    colorPalette.appendChild(div);
+    if (i===0) selectColor(c);
+  });
+}
+
+
+function selectColor(color){
+  selectedColor = color;
+  document.querySelectorAll('.color-btn').forEach(b => {
+    b.classList.toggle('selected', b.getAttribute('data-color') === color);
+  });
+}
+
+
+/* --------- HIGHSCORE --------- */
+function loadHighscores(){ try { const raw = localStorage.getItem(HIGHSCORE_KEY); return raw?JSON.parse(raw):[]; } catch(e){ return []; } }
+function saveHighscores(arr){ localStorage.setItem(HIGHSCORE_KEY, JSON.stringify(arr)); }
+function addHighscoreEntry(name, scoreObj){
+  if (!scoreObj) { showToast('Kein Score verfügbar'); return; }
+  const arr = loadHighscores();
+  arr.push({ name: name || 'Anonym', score: scoreObj.score, time: scoreObj.timeTaken, wrong: scoreObj.wrongChecks, date: Date.now() });
+  arr.sort((a,b)=> b.score - a.score || a.time - b.time);
+  const top = arr.slice(0,50);
+  saveHighscores(top);
+  renderLeaderboard();
+  showToast('Score gespeichert');
+}
+function clearHighscores(){ localStorage.removeItem(HIGHSCORE_KEY); renderLeaderboard(); showToast('Highscores gelöscht'); }
+
+
+function renderLeaderboard(){
+  const arr = loadHighscores();
+  leaderboardEl.innerHTML = '';
+  if (!arr.length) { leaderboardEl.innerHTML = '<div class="small-note">Noch keine Scores</div>'; return; }
+  arr.slice(0,20).forEach((e,i)=>{
+    const row = document.createElement('div'); row.className = 'lb-row';
+    const left = document.createElement('div'); left.innerHTML = `<strong>${i+1}. ${escapeHtml(e.name)}</strong><div class="lb-small">Zeit: ${e.time}s • Fehler: ${e.wrong}</div>`;
+    const right = document.createElement('div'); right.innerHTML = `<div style="text-align:right"><strong>${e.score}</strong></div><div class="lb-small">${new Date(e.date).toLocaleDateString()}</div>`;
+    row.appendChild(left); row.appendChild(right);
+    leaderboardEl.appendChild(row);
+  });
+}
+
+
+/* --------- LEVEL FLOW & TIMER --------- */
+function startLevel(level){
+  wrongChecks = 0; lastScore = null; isChecking = false;
+  const cfg = LEVELS[level - 1];
+  document.getElementById('levelInfo').textContent = `${level} — Radius ${cfg.radius} — ${cfg.triplets} Triplet(s)`;
+  document.getElementById('radiusLabel').textContent = cfg.radius;
+
+
+  createHexGrid(cfg.radius);
+  buildOrbits();
+  computeSectors();
+  generateSolutionAndGivens(cfg);
+  buildPalette(cfg.triplets);
+  renderBoard();
+  startTimer();
+}
+
+
+function startTimer(){
+  stopTimer();
+  levelStartTime = Date.now();
+  timerDisplay.textContent = '0s';
+  levelTimerId = setInterval(()=> {
+    const elapsed = Math.floor((Date.now() - levelStartTime)/1000);
+    timerDisplay.textContent = `${elapsed}s`;
+  }, 500);
+}
+function stopTimer(){ if (levelTimerId) { clearInterval(levelTimerId); levelTimerId = null; } }
+
+
+/* --------- UTIL --------- */
+function shuffleArray(a){ for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]); }
+function showToast(txt){ toast.textContent = txt; toast.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(()=> toast.classList.remove('show'), 1600); }
+
+
+/* ---------- EVENTS ---------- */
+checkBtn.addEventListener('click', ()=> checkSolution());
+resetBtn.addEventListener('click', ()=> startLevel(currentLevel));
+hintBtn.addEventListener('click', ()=> giveHint());
+saveScoreBtn.addEventListener('click', ()=> {
+  const name = nameInput.value.trim() || 'Anonym';
+  if (!lastScore) { showToast('Kein Score zum Speichern. Löse erst ein Level.'); return; }
+  addHighscoreEntry(name, lastScore);
+});
+clearScoresBtn.addEventListener('click', ()=> { if (confirm('Highscores wirklich löschen?')) clearHighscores(); });
+
+
+window.addEventListener('keydown', (e)=> {
+  if (e.key >= '1' && e.key <= '6') {
+    const idx = parseInt(e.key,10)-1;
+    const btns = Array.from(document.querySelectorAll('.color-btn'));
+    if (idx < btns.length) btns[idx].click();
+  } else if (e.key.toLowerCase() === 'r') { startLevel(currentLevel); }
+  else if (e.key === ' ') { e.preventDefault(); checkSolution(); }
+});
+
+
+let resizeTimer = null;
+window.addEventListener('resize', ()=> { if (resizeTimer) clearTimeout(resizeTimer); resizeTimer = setTimeout(()=> renderBoard(), 120); });
+
+
+/* ---------- CONFETTI (canvas) ---------- */
+const confettiCtx = confettiCanvas.getContext('2d');
+let confettiParticles = [];
+function resizeConfettiCanvas(){
+  const rect = boardWrap.getBoundingClientRect();
+  confettiCanvas.width = rect.width;
+  confettiCanvas.height = rect.height;
+  confettiCanvas.style.left = `${rect.left - boardWrap.getBoundingClientRect().left}px`;
+  confettiCanvas.style.top = `${rect.top - boardWrap.getBoundingClientRect().top}px`;
+}
+window.addEventListener('resize', ()=> resizeConfettiCanvas());
+
+
+function startConfetti(){
+  resizeConfettiCanvas();
+  confettiParticles = [];
+  const colors = Object.keys(COLOR_MAP);
+  const n = 60;
+  for (let i=0;i<n;i++){
+    confettiParticles.push({
+      x: Math.random()*confettiCanvas.width,
+      y: Math.random()*confettiCanvas.height/2,
+      vx: (Math.random()-0.5)*6,
+      vy: Math.random()*6+2,
+      r: Math.random()*6+2,
+      color: COLOR_MAP[colors[Math.floor(Math.random()*colors.length)]][0],
+      rot: Math.random()*360,
+      vr: (Math.random()-0.5)*10
+    });
+  }
+  let t0 = performance.now();
+  function step(t){
+    const dt = (t - t0)/1000; t0 = t;
+    confettiCtx.clearRect(0,0,confettiCanvas.width,confettiCanvas.height);
+    confettiParticles.forEach(p=>{
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.12;
+      p.rot += p.vr;
+      confettiCtx.save();
+      confettiCtx.translate(p.x,p.y);
+      confettiCtx.rotate(p.rot*Math.PI/180);
+      confettiCtx.fillStyle = p.color;
+      confettiCtx.fillRect(-p.r/2, -p.r/2, p.r, p.r*0.6);
+      confettiCtx.restore();
+    });
+    confettiParticles = confettiParticles.filter(p => p.y < confettiCanvas.height + 50);
+    if (confettiParticles.length) requestAnimationFrame(step);
+    else confettiCtx.clearRect(0,0,confettiCanvas.width,confettiCanvas.height);
+  }
+  requestAnimationFrame(step);
+}
+
+
+/* ---------- START ---------- */
+renderLeaderboard();
+startLevel(currentLevel);
+resizeConfettiCanvas();
+</script>
+</body>
+</html>
